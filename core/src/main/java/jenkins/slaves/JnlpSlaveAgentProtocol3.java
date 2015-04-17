@@ -35,7 +35,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 
 /**
- * Master-side implementation for JNLP3 protocol.
+ * Master-side implementation for JNLP3-connect protocol.
  *
  * <p>@see {@link JnlpProtocol3} for more details.
  */
@@ -59,14 +59,16 @@ public class JnlpSlaveAgentProtocol3 extends AgentProtocol {
         public Handler(NioChannelHub hub, Socket socket) throws IOException {
             super(hub,socket,
                     new DataInputStream(socket.getInputStream()),
-                    new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF-8")), true));
+                    new PrintWriter(new BufferedWriter(
+                            new OutputStreamWriter(socket.getOutputStream(), "UTF-8")), true));
         }
 
         protected void run() throws IOException, InterruptedException {
             request.load(new ByteArrayInputStream(in.readUTF().getBytes("UTF-8")));
             String nodeName = request.getProperty(JnlpProtocol3.SLAVE_NAME_KEY);
             String encryptedChallenge = request.getProperty(JnlpProtocol3.CHALLENGE_KEY);
-            byte[] handshakeSpecKey = CipherUtils.keyFromString(request.getProperty(JnlpProtocol3.HANDSHAKE_SPEC_KEY));
+            byte[] handshakeSpecKey = CipherUtils.keyFromString(
+                    request.getProperty(JnlpProtocol3.HANDSHAKE_SPEC_KEY));
             String cookie = request.getProperty(JnlpProtocol3.COOKIE_KEY);
 
             SlaveComputer computer = (SlaveComputer) Jenkins.getInstance().getComputer(nodeName);
@@ -99,25 +101,30 @@ public class JnlpSlaveAgentProtocol3 extends AgentProtocol {
             Channel oldChannel = computer.getChannel();
             if(oldChannel != null) {
                 if (cookie != null && cookie.equals(oldChannel.getProperty(COOKIE_NAME))) {
-                    // we think we are currently connected, but this request proves that it's from the party
-                    // we are supposed to be communicating to. so let the current one get disconnected
-                    LOGGER.info("Disconnecting " + nodeName + " as we are reconnected from the current peer");
+                    // We think we are currently connected, but this request proves that it's from
+                    // the party we are supposed to be communicating to. so let the current one get
+                    // disconnected
+                    LOGGER.info("Disconnecting " + nodeName +
+                            " as we are reconnected from the current peer");
                     try {
-                        computer.disconnect(new TcpSlaveAgentListener.ConnectionFromCurrentPeer()).get(15, TimeUnit.SECONDS);
+                        computer.disconnect(new TcpSlaveAgentListener.ConnectionFromCurrentPeer())
+                                .get(15, TimeUnit.SECONDS);
                     } catch (ExecutionException e) {
                         throw new IOException("Failed to disconnect the current client",e);
                     } catch (TimeoutException e) {
                         throw new IOException("Failed to disconnect the current client",e);
                     }
                 } else {
-                    error(nodeName + " is already connected to this master. Rejecting this connection.");
+                    error(nodeName +
+                            " is already connected to this master. Rejecting this connection.");
                     return;
                 }
             }
 
             // Send challenge response.
             String challengeReverse = new StringBuilder(
-                    challenge.substring(JnlpProtocol3.CHALLENGE_PREFIX.length())).reverse().toString();
+                    challenge.substring(JnlpProtocol3.CHALLENGE_PREFIX.length()))
+                    .reverse().toString();
             String challengeResponse = JnlpProtocol3.CHALLENGE_PREFIX + challengeReverse;
             String encryptedChallengeResponse = null;
             try {
@@ -142,7 +149,8 @@ public class JnlpSlaveAgentProtocol3 extends AgentProtocol {
                 String aesKeyString = handshakeCiphers.decrypt(encryptedAesKeyString);
                 String specKeyString = handshakeCiphers.decrypt(encryptedSpecKeyString);
                 channelCiphers = ChannelCiphers.create(
-                        CipherUtils.keyFromString(aesKeyString), CipherUtils.keyFromString(specKeyString));
+                        CipherUtils.keyFromString(aesKeyString),
+                        CipherUtils.keyFromString(specKeyString));
             } catch (Exception e) {
                 error("Failed to decrypt channel cipher keys");
                 return;
@@ -160,7 +168,8 @@ public class JnlpSlaveAgentProtocol3 extends AgentProtocol {
         }
 
         protected Channel jnlpConnect(
-                SlaveComputer computer, ChannelCiphers channelCiphers) throws InterruptedException, IOException {
+                SlaveComputer computer, ChannelCiphers channelCiphers)
+                throws InterruptedException, IOException {
             final String nodeName = computer.getName();
             final OutputStream log = computer.openLogFile();
             PrintWriter logw = new PrintWriter(log,true);
@@ -168,17 +177,20 @@ public class JnlpSlaveAgentProtocol3 extends AgentProtocol {
 
             try {
                 ChannelBuilder cb = createChannelBuilder(nodeName);
+                Channel channel = cb.withHeaderStream(log)
+                        .build(new CipherInputStream(SocketChannelStream.in(socket),
+                                        channelCiphers.getDecryptCipher()),
+                                new CipherOutputStream(SocketChannelStream.out(socket),
+                                        channelCiphers.getEncryptCipher()));
 
-                computer.setChannel(cb.withHeaderStream(log)
-                        .build(new CipherInputStream(SocketChannelStream.in(socket), channelCiphers.getDecryptCipher()),
-                                new CipherOutputStream(SocketChannelStream.out(socket), channelCiphers.getEncryptCipher())),
-                        log,
+                computer.setChannel(channel, log,
                         new Channel.Listener() {
                             @Override
                             public void onClosed(Channel channel, IOException cause) {
                                 if(cause != null)
                                     LOGGER.log(Level.WARNING,
-                                            Thread.currentThread().getName() + " for + " + nodeName + " terminated", cause);
+                                            Thread.currentThread().getName() + " for + " +
+                                                    nodeName + " terminated", cause);
                                 try {
                                     socket.close();
                                 } catch (IOException e) {
