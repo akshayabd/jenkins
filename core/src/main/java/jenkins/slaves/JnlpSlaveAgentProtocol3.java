@@ -6,6 +6,7 @@ import hudson.TcpSlaveAgentListener;
 import hudson.Util;
 import hudson.remoting.Channel;
 import hudson.remoting.ChannelBuilder;
+import hudson.remoting.SocketChannelStream;
 import hudson.slaves.SlaveComputer;
 import jenkins.AgentProtocol;
 import jenkins.model.Jenkins;
@@ -34,7 +35,9 @@ import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 
 /**
- * Comment here.
+ * Master-side implementation for JNLP3 protocol.
+ *
+ * <p>@see {@link JnlpProtocol3} for more details.
  */
 @Extension
 public class JnlpSlaveAgentProtocol3 extends AgentProtocol {
@@ -113,7 +116,8 @@ public class JnlpSlaveAgentProtocol3 extends AgentProtocol {
             }
 
             // Send challenge response.
-            String challengeReverse = new StringBuilder(challenge.substring(JnlpProtocol3.CHALLENGE_PREFIX.length())).reverse().toString();
+            String challengeReverse = new StringBuilder(
+                    challenge.substring(JnlpProtocol3.CHALLENGE_PREFIX.length())).reverse().toString();
             String challengeResponse = JnlpProtocol3.CHALLENGE_PREFIX + challengeReverse;
             String encryptedChallengeResponse = null;
             try {
@@ -147,12 +151,12 @@ public class JnlpSlaveAgentProtocol3 extends AgentProtocol {
             String newCookie = generateCookie();
             out.println(newCookie);
 
-            Channel establishedChannel = jnlpConnect(computer, handshakeCiphers);
+            Channel establishedChannel = jnlpConnect(computer, channelCiphers);
             establishedChannel.setProperty(COOKIE_NAME, newCookie);
         }
 
         protected Channel jnlpConnect(
-                SlaveComputer computer, HandshakeCiphers handshakeCiphers) throws InterruptedException, IOException {
+                SlaveComputer computer, ChannelCiphers channelCiphers) throws InterruptedException, IOException {
             final String nodeName = computer.getName();
             final OutputStream log = computer.openLogFile();
             PrintWriter logw = new PrintWriter(log,true);
@@ -161,23 +165,23 @@ public class JnlpSlaveAgentProtocol3 extends AgentProtocol {
             try {
                 ChannelBuilder cb = createChannelBuilder(nodeName);
 
-                computer.setChannel(cb.withHeaderStream(log).build(
-                                new CipherInputStream(socket.getInputStream(), handshakeCiphers.decryptCipher),
-                                new CipherOutputStream(socket.getOutputStream(), handshakeCiphers.encryptCipher)
-                        ), log,
+                computer.setChannel(cb.withHeaderStream(log)
+                        .build(new CipherInputStream(SocketChannelStream.in(socket), channelCiphers.getDecryptCipher()),
+                                new CipherOutputStream(SocketChannelStream.out(socket), channelCiphers.getEncryptCipher())),
+                        log,
                         new Channel.Listener() {
                             @Override
                             public void onClosed(Channel channel, IOException cause) {
-                                if(cause!=null)
-                                    LOGGER.log(Level.WARNING, Thread.currentThread().getName()+" for + " + nodeName + " terminated",cause);
+                                if(cause != null)
+                                    LOGGER.log(Level.WARNING,
+                                            Thread.currentThread().getName() + " for + " + nodeName + " terminated", cause);
                                 try {
                                     socket.close();
                                 } catch (IOException e) {
-                                    // ignore
+                                    // Do nothing.
                                 }
                             }
                         });
-                System.out.println("-----------------------------------------> returning channel");
                 return computer.getChannel();
             } catch (AbortException e) {
                 logw.println(e.getMessage());
@@ -197,5 +201,5 @@ public class JnlpSlaveAgentProtocol3 extends AgentProtocol {
         }
     }
 
-    static final String COOKIE_NAME = JnlpSlaveAgentProtocol3.class.getName()+".cookie";
+    static final String COOKIE_NAME = JnlpSlaveAgentProtocol3.class.getName() + ".cookie";
 }
