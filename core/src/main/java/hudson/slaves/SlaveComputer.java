@@ -360,8 +360,8 @@ public class SlaveComputer extends Computer {
      */
     public void setChannel(InputStream in, OutputStream out, OutputStream launchLog, Channel.Listener listener) throws IOException, InterruptedException {
         ChannelBuilder cb = new ChannelBuilder(nodeName,threadPoolForRemoting)
-            .withMode(Channel.Mode.NEGOTIATE)
-            .withHeaderStream(launchLog);
+                .withMode(Channel.Mode.NEGOTIATE)
+                .withHeaderStream(launchLog);
 
         for (ChannelConfigurator cc : ChannelConfigurator.all()) {
             cc.onChannelBuilding(cb,this);
@@ -464,16 +464,11 @@ public class SlaveComputer extends Computer {
     public void setChannel(Channel channel, OutputStream launchLog, Channel.Listener listener) throws IOException, InterruptedException {
         if(this.channel!=null)
             throw new IllegalStateException("Already connected");
-        System.out.println("-----------------------------------------> setChannel");
 
         final TaskListener taskListener = new StreamTaskListener(launchLog);
         PrintStream log = taskListener.getLogger();
 
-        System.out.println("-----------------------------------------> task listener made");
-
         channel.setProperty(SlaveComputer.class, this);
-
-        System.out.println("-----------------------------------------> computer set on channel");
 
         channel.addListener(new Channel.Listener() {
             @Override
@@ -489,15 +484,10 @@ public class SlaveComputer extends Computer {
                 launcher.afterDisconnect(SlaveComputer.this, taskListener);
             }
         });
-        System.out.println("-----------------------------------------> new listener set");
-
-        if (listener!=null) {
+        if(listener!=null)
             channel.addListener(listener);
-        }
-        System.out.println("-----------------------------------------> param listener set");
 
         String slaveVersion = channel.call(new SlaveVersion());
-        System.out.println("-----------------------------------------> slave version: " + slaveVersion);
         log.println("Slave.jar version: " + slaveVersion);
 
         boolean _isUnix = channel.call(new DetectOS());
@@ -511,7 +501,6 @@ public class SlaveComputer extends Computer {
         }
 
         String remoteFS = node.getRemoteFS();
-        System.out.println("-----------------------------------------> remoteFS: " + remoteFS);
         if (Util.isRelativePath(remoteFS)) {
             remoteFS = channel.call(new AbsolutePath(remoteFS));
             log.println("NOTE: Relative remote path resolved to: "+remoteFS);
