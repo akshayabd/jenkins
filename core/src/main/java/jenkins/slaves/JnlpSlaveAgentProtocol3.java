@@ -149,7 +149,11 @@ public class JnlpSlaveAgentProtocol3 extends AgentProtocol {
             }
 
             String newCookie = generateCookie();
-            out.println(newCookie);
+            try {
+                out.println(handshakeCiphers.encrypt(newCookie));
+            } catch (Exception e) {
+                throw new IOException("Error encrypting cookie", e);
+            }
 
             Channel establishedChannel = jnlpConnect(computer, channelCiphers);
             establishedChannel.setProperty(COOKIE_NAME, newCookie);
